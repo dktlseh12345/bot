@@ -13,6 +13,8 @@ from discord.utils import get
 from discord import FFmpegPCMAudio
 import random
 import os
+import ctypes
+import ctypes.util
 
 bot = commands.Bot(command_prefix='=')
 client = discord.Client()
