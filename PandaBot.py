@@ -1,412 +1,688 @@
-from ctypes.wintypes import MSG
-from socket import MsgFlag
-import discord
-from discord import embeds
-from discord import message
-from discord.ext import commands
-from discord.message import DeletedReferencedMessage
-from youtube_dl import YoutubeDL, options
-import bs4
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from discord.utils import get
-from discord import FFmpegPCMAudio
-import random
+# -*- coding: utf-8 -*- 
+
 import os
-import ctypes
-import ctypes.util
+import discord
+from discord.ext import commands
+from discord.ext.commands import CommandNotFound
+import logging
+import asyncio
+import itertools
+import sys
+import traceback
+import random
+import itertools
+import math
+from async_timeout import timeout
+from functools import partial
+import functools
+from youtube_dl import YoutubeDL
+import youtube_dl
+from io import StringIO
+import time
+import urllib.request
+from gtts import gTTS
 
-bot = commands.Bot(command_prefix='=')
-client = discord.Client()
+##################### 로깅 ###########################
+log_stream = StringIO()    
+logging.basicConfig(stream=log_stream, level=logging.WARNING)
 
-user = []
-musictitle = []
-song_queue = []
-musicnow = []
+#ilsanglog = logging.getLogger('discord')
+#ilsanglog.setLevel(level = logging.WARNING)
+#handler = logging.StreamHandler()
+#handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+#ilsanglog.addHandler(handler)
+#####################################################
 
-userF = []
-userFlist = []
-allplaylist = []
+access_token = os.environ["BOT_TOKEN"]
 
-def title(msg):
-    global music
+def init():
+	global command
 
-    YDL_OPTIONS = {'format': 'bestaudio', 'noplaylist':'True'}
-    FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+	command = []
+	fc = []
 
-    options = webdriver.ChromeOptions()
-    options.add_argument("headless")
+	command_inidata = open('command.ini', 'r', encoding = 'utf-8')
+	command_inputData = command_inidata.readlines()
 
-    drive = load_chrome_driver()
-    driver = webdriver.Chrome(chromedriver_dir, options = options)
-    driver.get("https://www.youtube.com/results?search_query="+msg+"+lyrics")
-    source = driver.page_source
-    bs = bs4.BeautifulSoup(source, 'lxml')
-    entire = bs.find_all('a', {'id': 'video-title'})
-    entireNum = entire[0]
-    music = entireNum.text.strip()
-    
-    musictitle.append(music)
-    musicnow.append(music)
-    test1 = entireNum.get('href')
-    url = 'https://www.youtube.com'+test1
-    with YoutubeDL(YDL_OPTIONS) as ydl:
-            info = ydl.extract_info(url, download=False)
-    URL = info['formats'][0]['url']
+	############## 뮤직봇 명령어 리스트 #####################
+	for i in range(len(command_inputData)):
+		tmp_command = command_inputData[i][12:].rstrip('\n')
+		fc = tmp_command.split(', ')
+		command.append(fc)
+		fc = []
 
-    driver.quit()
-    
-    return music, URL
+	del command[0]
 
-def play(ctx):
-    global vc
-    YDL_OPTIONS = {'format': 'bestaudio', 'noplaylist':'True'}
-    FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
-    URL = song_queue[0]
-    del user[0]
-    del musictitle[0]
-    del song_queue[0]
-    vc = get(bot.voice_clients, guild=ctx.guild)
-    if not vc.is_playing():
-        vc.play(FFmpegPCMAudio(URL, **FFMPEG_OPTIONS), after=lambda e: play_next(ctx)) 
+	command_inidata.close()
 
-def play_next(ctx):
-    if len(musicnow) - len(user) >= 2:
-        for i in range(len(musicnow) - len(user) - 1):
-            del musicnow[0]
-    YDL_OPTIONS = {'format': 'bestaudio', 'noplaylist':'True'}
-    FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
-    if len(user) >= 1:
-        if not vc.is_playing():
-            del musicnow[0]
-            URL = song_queue[0]
-            del user[0]
-            del musictitle[0]
-            del song_queue[0]
-            vc.play(discord.FFmpegPCMAudio(URL,**FFMPEG_OPTIONS), after=lambda e: play_next(ctx))
+	#print (command)
 
-    else:
-        if not vc.is_palying():
-            client.loop.create_task(vc.disconnect())
+init()
 
-def load_chrome_driver():
-      
-    options = webdriver.ChromeOptions()
+#mp3 파일 생성함수(gTTS 이용, 남성목소리)
+async def MakeSound(saveSTR, filename):
+	
+	tts = gTTS(saveSTR, lang = 'ko')
+	tts.save('./' + filename + '.wav')
+	'''
+	try:
+		encText = urllib.parse.quote(saveSTR)
+		urllib.request.urlretrieve("https://clova.ai/proxy/voice/api/tts?text=" + encText + "%0A&voicefont=1&format=wav",filename + '.wav')
+	except Exception as e:
+		print (e)
+		tts = gTTS(saveSTR, lang = 'ko')
+		tts.save('./' + filename + '.wav')
+		pass
+	'''
+#mp3 파일 재생함수	
+async def PlaySound(voiceclient, filename):
+	source = discord.FFmpegPCMAudio(filename)
+	try:
+		voiceclient.play(source)
+	except discord.errors.ClientException:
+		while voiceclient.is_playing():
+			await asyncio.sleep(1)
+	while voiceclient.is_playing():
+		await asyncio.sleep(1)
+	voiceclient.stop()
+	source.cleanup()
 
-    options.binary_location = os.getenv('GOOGLE_CHROME_BIN')
-
-    options.add_argument('--headless')
-    # options.add_argument('--disable-gpu')
-    options.add_argument('--no-sandbox')
-
-    return webdriver.Chrome(executable_path=str(os.environ.get('CHROME_EXECUTABLE_PATH')), chrome_options=options)
-
-@bot.command()
-async def 대기열추가(ctx, *, msg):
-    user.append(msg)
-    result, URLTEST = title(msg)
-    song_queue.append(URLTEST)
-    await ctx.send(result + "를 재생목록에 추가했어요!")
-
-@bot.command()
-async def 대기열삭제(ctx, *, number):
-    try:
-        ex = len(musicnow) - len(user)
-        del user[int(number) - 1]
-        del musictitle[int(number) - 1]
-        del song_queue[int(number)-1]
-        del musicnow[int(number)-1+ex]
-            
-        await ctx.send("대기열이 정상적으로 삭제되었습니다.")
-    except:
-        if len(list) == 0:
-            await ctx.send("대기열에 노래가 없어 삭제할 수 없어요!")
-        else:
-            if len(list) < int(number):
-                await ctx.send("숫자의 범위가 목록개수를 벗어났습니다!")
-            else:
-                await ctx.send("숫자를 입력해주세요!")
-
-@bot.command()
-async def 목록(ctx):
-    if len(musictitle) == 0:
-        await ctx.send("아직 아무노래도 등록하지 않았어요.")
-    else:
-        global Text
-        Text = ""
-        for i in range(len(musictitle)):
-            Text = Text + "\n" + str(i + 1) + ". " + str(musictitle[i])
-            
-        await ctx.send(embed = discord.Embed(title= "노래목록", description = Text.strip(), color = 0x00ff00))
-
-@bot.command()
-async def 목록초기화(ctx):
-    try:
-        ex = len(musicnow) - len(user)
-        del user[:]
-        del musictitle[:]
-        del song_queue[:]
-        while True:
-            try:
-                del musicnow[ex]
-            except:
-                break
-        await ctx.send(embed = discord.Embed(title= "목록초기화", description = """목록이 정상적으로 초기화되었습니다. 이제 노래를 등록해볼까요?""", color = 0x00ff00))
-    except:
-        await ctx.send("아직 아무노래도 등록하지 않았어요.")
-
-@bot.command()
-async def 목록재생(ctx):
-
-    YDL_OPTIONS = {'format': 'bestaudio', 'noplaylist':'True'}
-    FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
-    
-    if len(user) == 0:
-        await ctx.send("아직 아무노래도 등록하지 않았어요.")
-    else:
-        if len(musicnow) - len(user) >= 1:
-            for i in range(len(musicnow) - len(user)):
-                del musicnow[0]
-        if not vc.is_playing():
-            play(ctx)
-        else:
-            await ctx.send("노래가 이미 재생되고 있어요!")
-
-@bot.command()
-async def 즐겨찾기(ctx):
-    global Ftext
-    Ftext = ""
-    correct = 0
-    global Flist
-    for i in range(len(userF)):
-        if userF[i] == str(ctx.message.author.name): #userF에 유저정보가 있는지 확인
-            correct = 1 #있으면 넘김
-    if correct == 0:
-        userF.append(str(ctx.message.author.name)) #userF에다가 유저정보를 저장
-        userFlist.append([]) #유저 노래 정보 첫번째에 유저이름을 저장하는 리스트를 만듬.
-        userFlist[len(userFlist)-1].append(str(ctx.message.author.name))
-        
-    for i in range(len(userFlist)):
-        if userFlist[i][0] == str(ctx.message.author.name):
-            if len(userFlist[i]) >= 2: # 노래가 있다면
-                for j in range(1, len(userFlist[i])):
-                    Ftext = Ftext + "\n" + str(j) + ". " + str(userFlist[i][j])
-                titlename = str(ctx.message.author.name) + "님의 즐겨찾기"
-                embed = discord.Embed(title = titlename, description = Ftext.strip(), color = 0x00ff00)
-                embed.add_field(name = "목록에 추가\U0001F4E5", value = "즐겨찾기에 모든 곡들을 목록에 추가합니다.", inline = False)
-                embed.add_field(name = "플레이리스트로 추가\U0001F4DD", value = "즐겨찾기에 모든 곡들을 새로운 플레이리스트로 저장합니다.", inline = False)
-                Flist = await ctx.send(embed = embed)
-                await Flist.add_reaction("\U0001F4E5")
-                await Flist.add_reaction("\U0001F4DD")
-            else:
-                await ctx.send("아직 등록하신 즐겨찾기가 없어요.")
+# Silence useless bug reports messages
+youtube_dl.utils.bug_reports_message = lambda: ''
 
 
-    if not discord.opus.is_loaded():
-        discord.opus.load_opus('opus')
+class VoiceError(Exception):
+	pass
+
+
+class YTDLError(Exception):
+	pass
+
+
+class YTDLSource(discord.PCMVolumeTransformer):
+	YTDL_OPTIONS = {
+		'format': 'bestaudio/best',
+		'extractaudio': True,
+		'audioformat': 'mp3',
+		'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+		'restrictfilenames': True,
+		'noplaylist': False,
+		'nocheckcertificate': True,
+		'ignoreerrors': False,
+		'logtostderr': False,
+		'quiet': True,
+		'no_warnings': True,
+		'default_search': 'auto',
+		'source_address': '0.0.0.0',
+		'force-ipv4' : True,
+    		'-4': True
+	}
+
+	FFMPEG_OPTIONS = {
+		'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+		'options': '-vn',
+	}
+
+	ytdl = youtube_dl.YoutubeDL(YTDL_OPTIONS)
+
+	def __init__(self, ctx: commands.Context, source: discord.FFmpegPCMAudio, *, data: dict, volume: float = 0.5):
+		super().__init__(source, volume)
+		self.requester = ctx.author
+		self.channel = ctx.channel
+		self.data = data
+
+		self.uploader = data.get('uploader')
+		self.uploader_url = data.get('uploader_url')
+		date = data.get('upload_date')
+		self.upload_date = date[6:8] + '.' + date[4:6] + '.' + date[0:4]
+		self.title = data.get('title')
+		self.thumbnail = data.get('thumbnail')
+		self.description = data.get('description')
+		self.duration = self.parse_duration(int(data.get('duration')))
+		self.tags = data.get('tags')
+		self.url = data.get('webpage_url')
+		self.views = data.get('view_count')
+		self.likes = data.get('like_count')
+		self.dislikes = data.get('dislike_count')
+		self.stream_url = data.get('url')
+
+	def __str__(self):
+		return '**{0.title}** by **{0.uploader}**'.format(self)
+
+	@classmethod
+	async def create_source(cls, bot, ctx: commands.Context, search: str, *, loop: asyncio.BaseEventLoop = None):
+		loop = loop or asyncio.get_event_loop()
+
+		if "http" not in search:
+			partial = functools.partial(cls.ytdl.extract_info, f"ytsearch5:{search}", download=False, process=False)
+
+			data = await loop.run_in_executor(None, partial)
+
+			if data is None:
+				raise YTDLError('Couldn\'t find anything that matches `{}`'.format(search))
+
+			emoji_list : list = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "🚫"]
+			song_list_str : str = ""
+			cnt : int = 0
+			song_index : int = 0
+			song_url_list : list = []
+
+			for data_info in data["entries"]:
+				cnt += 1
+				if 'title' not in data_info:
+					data_info['title'] = f"{search} - 제목 정보 없음"
+				song_list_str += f"`{cnt}.` [**{data_info['title']}**](https://www.youtube.com/watch?v={data_info['url']})\n"
+				song_url_list.append(f"https://www.youtube.com/watch?v={data_info['url']}")
+
+			embed = discord.Embed(description= song_list_str)
+			embed.set_footer(text=f"20초 안에 미선택시 취소됩니다.")
+
+			song_list_message = await ctx.send(embed = embed)
+
+			for emoji in emoji_list:
+				await song_list_message.add_reaction(emoji)
+
+			def reaction_check(reaction, user):
+				return (reaction.message.id == song_list_message.id) and (user.id == ctx.author.id) and (str(reaction) in emoji_list)
+			try:
+				reaction, user = await bot.wait_for('reaction_add', check = reaction_check, timeout = 20)
+			except asyncio.TimeoutError:
+				reaction = "🚫"
+
+			for emoji in emoji_list:
+				await song_list_message.remove_reaction(emoji, bot.user)
+
+			await song_list_message.delete(delay = 10)
+			
+			if str(reaction) == "1️⃣":
+				song_index = 0
+			elif str(reaction) == "2️⃣":
+				song_index = 1
+			elif str(reaction) == "3️⃣":
+				song_index = 2
+			elif str(reaction) == "4️⃣":
+				song_index = 3
+			elif str(reaction) == "5️⃣":
+				song_index = 4
+			else:
+				return False
+			
+			#result_url = f"https://www.youtube.com/watch?v={data['entries'][song_index]['url']}"
+			result_url = song_url_list[song_index]
+			print(result_url)
+		else:
+			result_url = search
+
+		webpage_url = result_url
+		partial = functools.partial(cls.ytdl.extract_info, webpage_url, download=False)
+		processed_info = await loop.run_in_executor(None, partial)
+		if processed_info is None:
+			raise YTDLError('Couldn\'t fetch `{}`'.format(webpage_url))
+		
+		if 'entries' not in processed_info:
+			info = processed_info
+		else:
+			info = None
+			while info is None:
+				try:
+					info = processed_info['entries'].pop(0)
+				except IndexError:
+					raise YTDLError('Couldn\'t retrieve any matches for `{}`'.format(webpage_url))
+
+		return cls(ctx, discord.FFmpegPCMAudio(info['url'], **cls.FFMPEG_OPTIONS), data=info)
+
+	@staticmethod
+	def parse_duration(duration: int):
+		return time.strftime('%H:%M:%S', time.gmtime(duration))
+
+
+class Song:
+	__slots__ = ('source', 'requester')
+
+	def __init__(self, source: YTDLSource):
+		self.source = source
+		self.requester = source.requester
+
+	def create_embed(self):
+		embed = (discord.Embed(title='Now playing',
+							description='**```fix\n{0.source.title}\n```**'.format(self),
+							color=discord.Color.blurple())
+				.add_field(name='Duration', value=self.source.duration)
+				.add_field(name='Requested by', value=self.requester.mention)
+				.add_field(name='Uploader', value='[{0.source.uploader}]({0.source.uploader_url})'.format(self))
+				.add_field(name='URL', value='[Click]({0.source.url})'.format(self))
+				.set_thumbnail(url=self.source.thumbnail))
+
+		return embed
+
+
+class SongQueue(asyncio.Queue):
+	def __getitem__(self, item):
+		if isinstance(item, slice):
+			return list(itertools.islice(self._queue, item.start, item.stop, item.step))
+		else:
+			return self._queue[item]
+
+	def __iter__(self):
+		return self._queue.__iter__()
+
+	def __len__(self):
+		return self.qsize()
+
+	def clear(self):
+		self._queue.clear()
+
+	def shuffle(self):
+		random.shuffle(self._queue)
+
+	def reserve(self, item):
+		self._queue.insert(0, item)
+
+	def select(self, index : int, loop : bool = False):
+		for i in range(index-1):
+			if not loop:
+				del self._queue[0]
+			else:
+				self._queue.append(self._queue[0])
+				del self._queue[0]
+
+	def remove(self, index: int):
+		del self._queue[index]
+
+
+class VoiceState:
+	def __init__(self, bot: commands.Bot, ctx: commands.Context):
+		self.bot = bot
+		self._ctx = ctx
+		self._cog = ctx.cog
+
+		self.current = None
+		self.voice = None
+		self.next = asyncio.Event()
+		self.songs = SongQueue()
+
+		self._loop = False
+		self._volume = 0.5
+		self.skip_votes = set()
+
+		self.audio_player = bot.loop.create_task(self.audio_player_task())
+
+	def __del__(self):
+		self.audio_player.cancel()
+
+	@property
+	def loop(self):
+		return self._loop
+
+	@loop.setter
+	def loop(self, value: bool):
+		self._loop = value
+
+	@property
+	def volume(self):
+		return self._volume
+
+	@volume.setter
+	def volume(self, value: float):
+		self._volume = value
+
+	@property
+	def is_playing(self):
+		return self.voice and self.current
+
+	async def audio_player_task(self):
+		while True:
+			self.next.clear()
+
+			if self.loop and self.current is not None:
+				source1 = await YTDLSource.create_source(self.bot, self._ctx, self.current.source.url, loop=self.bot.loop)
+				song1 = Song(source1)
+				await self.songs.put(song1)
+			else:
+				pass
+
+			try:
+				async with timeout(180):  # 3 minutes
+					self.current = await self.songs.get()
+			except asyncio.TimeoutError:
+				self.bot.loop.create_task(self.stop())
+				return
+
+			self.current.source.volume = self._volume
+			self.voice.play(self.current.source, after=self.play_next_song)
+			play_info_msg = await self.current.source.channel.send(embed=self.current.create_embed())
+			await play_info_msg.delete(delay = 20)
+
+			await self.next.wait()
+
+	def play_next_song(self, error=None):
+		if error:
+			raise VoiceError(str(error))
+
+		self.next.set()
+
+	def skip(self):
+		self.skip_votes.clear()
+
+		if self.is_playing:
+			self.voice.stop()
+
+	async def stop(self):
+		self.songs.clear()
+
+		if self.voice:
+			await self.voice.disconnect()
+			self.voice = None
+
+		self.bot.loop.create_task(self._cog.cleanup(self._ctx))
+
+class Music(commands.Cog):
+	def __init__(self, bot: commands.Bot):
+		self.bot = bot
+		self.voice_states = {}
+
+	def get_voice_state(self, ctx: commands.Context):
+		state = self.voice_states.get(ctx.guild.id)
+		if not state:
+			state = VoiceState(self.bot, ctx)
+			self.voice_states[ctx.guild.id] = state
+
+		return state
+
+	def cog_unload(self):
+		for state in self.voice_states.values():
+			self.bot.loop.create_task(state.stop())
+
+	def cog_check(self, ctx: commands.Context):
+		if not ctx.guild:
+			raise commands.NoPrivateMessage('This command can\'t be used in DM channels.')
+
+		return True
+
+	async def cog_before_invoke(self, ctx: commands.Context):
+		ctx.voice_state = self.get_voice_state(ctx)
+
+	async def cog_command_error(self, ctx: commands.Context, error: commands.CommandError):
+		await ctx.send('에러 : {}'.format(str(error)))
+	'''
+	@commands.command(name='join', invoke_without_subcommand=True)
+	async def _join(self, ctx: commands.Context):
+		destination = ctx.author.voice.channel
+		if ctx.voice_state.voice:
+			await ctx.voice_state.voice.move_to(destination)
+			return
+		ctx.voice_state.voice = await destination.connect()
+	'''
+	async def cleanup(self, ctx: commands.Context):
+		del self.voice_states[ctx.guild.id]
+
+	@commands.command(name=command[0][0], aliases=command[0][1:])
+	#@commands.has_permissions(manage_guild=True)
+	async def _summon(self, ctx: commands.Context, *, channel: discord.VoiceChannel = None):
+		if not channel and not ctx.author.voice:
+			raise VoiceError(':no_entry_sign: 현재 접속중인 음악채널이 없습니다.')
+
+		destination = channel or ctx.author.voice.channel
+		if ctx.voice_state.voice:
+			await ctx.voice_state.voice.move_to(destination)
+			return
+
+		ctx.voice_state.voice = await destination.connect()
+
+	@commands.command(name=command[1][0], aliases=command[1][1:])
+	#@commands.has_permissions(manage_guild=True)
+	async def _leave(self, ctx: commands.Context):
+		if not ctx.voice_state.voice:
+			return await ctx.send(':no_entry_sign: 현재 접속중인 음악채널이 없습니다.')
+
+		await ctx.voice_state.stop()
+		del self.voice_states[ctx.guild.id]
+
+	@commands.command(name=command[8][0], aliases=command[8][1:])
+	async def _volume(self, ctx: commands.Context, *, volume: int):
+		vc = ctx.voice_client
+
+		if not ctx.voice_state.is_playing:
+			return await ctx.send(':mute: 현재 재생중인 음악이 없습니다.')
+
+		if not 0 < volume < 101:
+			return await ctx.send('```볼륨은 1 ~ 100 사이로 입력 해주세요.```')
+
+		if vc.source:
+			vc.source.volume = volume / 100
+
+		ctx.voice_state.volume = volume / 100
+		await ctx.send(':loud_sound: 볼륨을 {}%로 조정하였습니다.'.format(volume))
+
+	@commands.command(name=command[7][0], aliases=command[7][1:])
+	async def _now(self, ctx: commands.Context):
+		await ctx.send(embed=ctx.voice_state.current.create_embed())
+
+	@commands.command(name=command[3][0], aliases=command[3][1:])
+	#@commands.has_permissions(manage_guild=True)
+	async def _pause(self, ctx: commands.Context):
+		if ctx.voice_state.is_playing and ctx.voice_state.voice.is_playing():
+			ctx.voice_state.voice.pause()
+			await ctx.message.add_reaction('⏸')
+
+	@commands.command(name=command[4][0], aliases=command[4][1:])
+	#@commands.has_permissions(manage_guild=True)
+	async def _resume(self, ctx: commands.Context):
+		if ctx.voice_state.is_playing and ctx.voice_state.voice.is_paused():
+			ctx.voice_state.voice.resume()
+			await ctx.message.add_reaction('⏯')
+
+	@commands.command(name=command[9][0], aliases=command[9][1:])
+	#@commands.has_permissions(manage_guild=True)
+	async def _stop(self, ctx: commands.Context):
+		ctx.voice_state.songs.clear()
+
+		if ctx.voice_state.is_playing:
+			ctx.voice_state.voice.stop()
+			await ctx.message.add_reaction('⏹')
+
+	@commands.command(name=command[5][0], aliases=command[5][1:])
+	async def _skip(self, ctx: commands.Context, *, args: int = 1):
+		if not ctx.voice_state.is_playing:
+			return await ctx.send(':mute: 현재 재생중인 음악이 없습니다.')
+
+		await ctx.message.add_reaction('⏭')
+
+		if args != 1:
+			ctx.voice_state.songs.select(args, ctx.voice_state.loop)
+
+		ctx.voice_state.skip()
+		'''	
+		voter = ctx.message.author
+		if voter == ctx.voice_state.current.requester:
+			await ctx.message.add_reaction('⏭')
+			ctx.voice_state.skip()
+		elif voter.id not in ctx.voice_state.skip_votes:
+			ctx.voice_state.skip_votes.add(voter.id)
+			total_votes = len(ctx.voice_state.skip_votes)
+			if total_votes >= 3:
+				await ctx.message.add_reaction('⏭')
+				ctx.voice_state.skip()
+			else:
+				await ctx.send('Skip vote added, currently at **{}/3**'.format(total_votes))
+		else:
+			await ctx.send('```이미 투표하셨습니다.```')
+		'''
+	@commands.command(name=command[6][0], aliases=command[6][1:])
+	async def _queue(self, ctx: commands.Context, *, page: int = 1):
+
+		if len(ctx.voice_state.songs) == 0:
+			return await ctx.send(':mute: 재생목록이 없습니다.')
+		
+		items_per_page = 10
+		pages = math.ceil(len(ctx.voice_state.songs) / items_per_page)
+
+		start = (page - 1) * items_per_page
+		end = start + items_per_page
+
+		queue = ''
+		for i, song in enumerate(ctx.voice_state.songs[start:end], start=start):
+			queue += '`{0}.` [**{1.source.title}**]({1.source.url})\n'.format(i + 1, song)
+
+		if ctx.voice_state.loop:
+			embed = discord.Embed(title = '🔁  Now playing', description='**```fix\n{0.source.title}\n```**'.format(ctx.voice_state.current))
+		else:
+			embed = discord.Embed(title = 'Now playing', description='**```fix\n{0.source.title}\n```**'.format(ctx.voice_state.current))
+		embed.add_field(name ='\u200B\n**{} tracks:**\n'.format(len(ctx.voice_state.songs)), value = f"\u200B\n{queue}")
+		embed.set_thumbnail(url=ctx.voice_state.current.source.thumbnail)
+		embed.set_footer(text='Viewing page {}/{}'.format(page, pages))
+		await ctx.send(embed=embed)
+
+	@commands.command(name=command[11][0], aliases=command[11][1:])
+	async def _shuffle(self, ctx: commands.Context):
+		if len(ctx.voice_state.songs) == 0:
+			return await ctx.send(':mute: 재생목록이 없습니다.')
+
+		ctx.voice_state.songs.shuffle()
+		result = await ctx.send('셔플 완료!')
+		await result.add_reaction('🔀')
+
+	@commands.command(name=command[10][0], aliases=command[10][1:])
+	async def _remove(self, ctx: commands.Context, index: int):
+		if len(ctx.voice_state.songs) == 0:
+			return await ctx.send(':mute: 재생목록이 없습니다.')
+		
+		remove_result = '`{0}.` [**{1.source.title}**] 삭제 완료!\n'.format(index, ctx.voice_state.songs[index - 1])
+		result = await ctx.send(remove_result)
+		ctx.voice_state.songs.remove(index - 1)
+		await result.add_reaction('✅')
+		
+
+	@commands.command(name=command[14][0], aliases=command[14][1:])
+	async def _loop(self, ctx: commands.Context):
+		if not ctx.voice_state.is_playing:
+			return await ctx.send(':mute: 현재 재생중인 음악이 없습니다.')
+
+		# Inverse boolean value to loop and unloop.
+		ctx.voice_state.loop = not ctx.voice_state.loop
+		if ctx.voice_state.loop :
+			result = await ctx.send('반복재생이 설정되었습니다!')
+		else:
+			result = await ctx.send('반복재생이 취소되었습니다!')
+		await result.add_reaction('🔁')
+
+	@commands.command(name=command[2][0], aliases=command[2][1:])
+	async def _play(self, ctx: commands.Context, *, search: str):
+		if not ctx.voice_state.voice:
+			await ctx.invoke(self._summon)
+
+		async with ctx.typing():
+			try:
+				source = await YTDLSource.create_source(self.bot, ctx, search, loop=self.bot.loop)
+				if not source:
+					return await ctx.send(f"노래 재생/예약이 취소 되었습니다.")
+			except YTDLError as e:
+				await ctx.send('에러가 발생했습니다 : {}'.format(str(e)))
+			else:
+				song = Song(source)
+
+				await ctx.voice_state.songs.put(song)
+				await ctx.send('재생목록 추가 : {}'.format(str(source)))
+
+	@commands.command(name=command[15][0], aliases=command[15][1:])
+	async def _reserve(self, ctx: commands.Context, *, search: str):
+		if not ctx.voice_state.is_playing:
+			return await ctx.send(f":mute: 현재 재생중인 음악이 없습니다. {command[2][0]} 명령어를 통해 노래를 예약해주세요!")
+
+		async with ctx.typing():
+			try:
+				source = await YTDLSource.create_source(self.bot, ctx, search, loop=self.bot.loop)
+				if not source:
+					return await ctx.send(f"노래 재생/예약이 취소 되었습니다.")
+			except YTDLError as e:
+				await ctx.send('에러가 발생했습니다 : {}'.format(str(e)))
+			else:
+				song = Song(source)
+
+				ctx.voice_state.songs.reserve(song)
+				await ctx.send('재생목록 추가 : {}'.format(str(source)))
+
+	@commands.command(name=command[13][0], aliases=command[13][1:])
+	async def clear_channel_(self, ctx: commands.Context, *, msg: int = 1):
+		try:
+			msg = int(msg)
+		except:
+			await ctx.send(f"```지우고 싶은 줄수는 [숫자]로 입력해주세요!```")
+		await ctx.channel.purge(limit = msg)
+
+	@_summon.before_invoke
+	@_play.before_invoke
+	async def ensure_voice_state(self, ctx: commands.Context):
+		if not ctx.author.voice or not ctx.author.voice.channel:
+			raise commands.CommandError('음성채널에 접속 후 사용해주십시오.')
+
+		if ctx.voice_client:
+			if ctx.voice_client.channel != ctx.author.voice.channel:
+				raise commands.CommandError('봇이 이미 음성채널에 접속해 있습니다.')
+
+	@commands.command(name=command[12][0], aliases=command[12][1:])   #도움말
+	async def menu_(self, ctx):
+		command_list = ''
+		command_list += '!인중 : 봇상태가 안좋을 때 쓰세요!\n'     #!
+		command_list += ','.join(command[0]) + '\n'     #!들어가자
+		command_list += ','.join(command[1]) + '\n'     #!나가자
+		command_list += ','.join(command[2]) + ' [검색어] or [url]\n'     #!재생
+		command_list += ','.join(command[15]) + ' [검색어] or [url]\n'     #!우선예약
+		command_list += ','.join(command[3]) + '\n'     #!일시정지
+		command_list += ','.join(command[4]) + '\n'     #!다시재생
+		command_list += ','.join(command[5]) + ' (숫자)\n'     #!스킵
+		command_list += ','.join(command[6]) + ' 혹은 [명령어] + [숫자]\n'     #!목록
+		command_list += ','.join(command[7]) + '\n'     #!현재재생
+		command_list += ','.join(command[8]) + ' [숫자 1~100]\n'     #!볼륨
+		command_list += ','.join(command[9]) + '\n'     #!정지
+		command_list += ','.join(command[10]) + '\n'     #!삭제
+		command_list += ','.join(command[11]) + '\n'     #!섞기
+		command_list += ','.join(command[14]) + '\n'     #!
+		command_list += ','.join(command[13]) + ' [숫자]\n'     #!채팅청소
+		embed = discord.Embed(
+				title = "----- 명령어 -----",
+				description= '```' + command_list + '```',
+				color=0xff00ff
+				)
+		await ctx.send( embed=embed, tts=False)
+	################ 음성파일 생성 후 재생 ################ 			
+	@commands.command(name="!인중")
+	async def playText_(self, ctx):
+		#msg = ctx.message.content[len(ctx.invoked_with)+1:]
+		#sayMessage = msg
+		#await MakeSound('뮤직봇이 마이 아파요. 잠시 후 사용해주세요.', './say' + str(ctx.guild.id))
+		await ctx.send("```뮤직봇이 마이 아파요. 잠시 후 사용해주세요.```", tts=False)
+		
+		if not ctx.voice_state.voice:
+			await ctx.invoke(self._summon)
+			
+		if ctx.voice_state.is_playing:
+			ctx.voice_state.voice.stop()
+		
+		#await PlaySound(ctx.voice_state.voice, './say' + str(ctx.guild.id) + '.wav')
+
+
+		await ctx.voice_state.stop()
+		del self.voice_states[ctx.guild.id]
+
+bot = commands.Bot('', help_command = None, description='해성뮤직봇')
+bot.add_cog(Music(bot))
 
 @bot.event
 async def on_ready():
-    print('다음으로 로그인합니다: ')
-    print(bot.user.name)
-    print('connection was succesful')
-    await bot.change_presence(status=discord.Status.online, activity=discord.Game("봇 코딩중~"))
+	print("Logged in as ") #화면에 봇의 아이디, 닉네임이 출력됩니다.
+	print(bot.user.name)
+	print(bot.user.id)
+	print("===========")
+	
+	await bot.change_presence(status=discord.Status.dnd, activity=discord.Game(name=command[12][0], type=1), afk = False)
 
-@bot.command()
-async def 입장(ctx):
-    try:
-        global vc
-        vc = await ctx.message.author.voice.channel.connect()
-    except:
-        try:
-            await vc.move_to(ctx.message.author.voice.channel)
-        except:
-            await ctx.send("체널에 유저가 접속을 안 했네요..")
-        
-@bot.command()
-async def 퇴장(ctx):
-    try:
-        await vc.disconnect()
-    except:
-        await ctx.send("이미 그 채널에 속해있지 않아요.")
-
-@bot.command()
-async def 도움말(ctx):
-    await ctx.send(embed = discord.Embed(title='도움말',description="""
-\n=도움말 -> 뮤직봇의 모든 명령어를 볼 수 있습니다.
-\n=입장 -> 뮤직봇을 자신이 속한 채널로 부릅니다.
-\n=퇴장 -> 뮤직봇을 자신이 속한 채널에서 내보냅니다.
-\n=재생 [노래링크] -> 유튜브URL를 입력하면 뮤직봇이 노래를 틀어줍니다.
-(목록재생에서는 사용할 수 없습니다.)
-\n=검색 [노래이름] -> 뮤직봇이 노래를 검색해 틀어줍니다.
-\n=노래끄기 -> 현재 재생중인 노래를 끕니다.
-=일시정지 -> 현재 재생중인 노래를 일시정지시킵니다.
-=다시재생 -> 일시정지시킨 노래를 다시 재생합니다.
-=스킵 -> 현재 재생중인 노래를 스킵합니다.
-\n=지금노래 -> 지금 재생되고 있는 노래의 제목을 알려줍니다.
-\n=멜론차트 -> 최신 멜론차트를 재생합니다.
-\n=즐겨찾기 -> 자신의 즐겨찾기 리스트를 보여줍니다.
-=즐겨찾기추가 [노래이름] -> 뮤직봇이 노래를 검색해 즐겨찾기에 추가합니다.
-=즐겨찾기삭제 [숫자] ->자신의 즐겨찾기에서 숫자에 해당하는 노래를 지웁니다.
-\n=목록 -> 이어서 재생할 노래목록을 보여줍니다.
-=목록재생 -> 목록에 추가된 노래를 재생합니다.
-=목록초기화 -> 목록에 추가된 모든 노래를 지웁니다.
-\n=대기열추가 [노래] -> 노래를 대기열에 추가합니다.
-=대기열삭제 [숫자] -> 대기열에서 입력한 숫자에 해당하는 노래를 지웁니다.""", color = 0x00ff00))
-
-@bot.command()
-async def 재생(ctx, *, url):
-
-    try:
-        global vc
-        vc = await ctx.message.author.voice.channel.connect()
-    except:
-        try:
-            await vc.move_to(ctx.message.author.voice.channel)
-        except:
-            await ctx.send("체널에 유저가 접속을 안 했네요..")
-
-    YDL_OPTIONS = {'format': 'bestaudio','noplaylist':'True'}
-    FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
-
-    if not vc.is_playing():
-        with YoutubeDL(YDL_OPTIONS) as ydl:
-            info = ydl.extract_info(url, download=False)
-        URL = info['formats'][0]['url']
-        vc.play(FFmpegPCMAudio(URL, **FFMPEG_OPTIONS))
-        await ctx.send(embed = discord.Embed(title= "노래 재생", description = "현재 " + url + "을(를) 재생하고 있습니다.", color = 0x00ff00))
-    else:
-        user.append(url)
-        result,URLTEST = title(url)
-        song_queue.append(URLTEST)
-        await ctx.send("이미 노래가 재생 중이라 " + result + "을(를) 대기열로 추가시켰습니다")
-
-@bot.command()
-async def 스킵(ctx):
-    if len(user) > 1:
-        if vc.is_playing():
-            vc.stop()
-            global number
-            number = 0
-            await ctx.send(embed = discord.Embed(title = "스킵", description = musicnow[1] + "을(를) 다음에 재생합니다!", color = 0x00ff00))
-        else:
-            await ctx.send("노래가 이미 재생되고 있어요!")
-    else:
-        await ctx.send("목록에 노래가 2개 이상 없네요..")
-
-@bot.command()
-async def 검색(ctx, *, msg):
-
-    try:
-        global vc
-        vc = await ctx.message.author.voice.channel.connect()
-    except:
-        try:
-            await vc.move_to(ctx.message.author.voice.channel)
-        except:
-            await ctx.send("체널에 유저가 접속을 안 했네요..")
-
-    if not vc.is_playing():
-
-        options = webdriver.ChromeOptions()
-        options.add_argument("headless")
-
-        global entireText
-        YDL_OPTIONS = {'format': 'bestaudio', 'noplaylist':'True'}
-        FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
-            
-        drive = load_chrome_driver()
-        driver = webdriver.Chrome(chromedriver_dir, options = options)
-        driver.get("https://www.youtube.com/results?search_query="+msg+"+lyrics")
-        source = driver.page_source
-        bs = bs4.BeautifulSoup(source, 'lxml')
-        entire = bs.find_all('a', {'id': 'video-title'})
-        entireNum = entire[0]
-        entireText = entireNum.text.strip()
-        musicurl = entireNum.get('href')
-        url = 'https://www.youtube.com'+musicurl 
-
-        driver.quit()
-        
-        musicnow.insert(0, entireText)
-        with YoutubeDL(YDL_OPTIONS) as ydl:
-            info = ydl.extract_info(url, download=False)
-        URL = info['formats'][0]['url']
-        await ctx.send(embed = discord.Embed(title= "노래 재생", description = "현재 " + entireText + "을(를) 재생하고 있습니다.", color = 0x00ff00))
-        vc.play(FFmpegPCMAudio(URL, **FFMPEG_OPTIONS), after = lambda e: play_next(ctx))
-    else:
-        user.append(msg)
-        result,URLTEST = title(msg)
-        song_queue.append(URLTEST)
-        await ctx.send("이미 노래가 재생 중이라" + result + "을(를) 대기열로 추가시켰습니다")
-    
-@bot.command()
-async def 일시정지(ctx):
-    if vc.is_playing():
-        vc.pause()
-        await ctx.send(embed = discord.Embed(title= "일시정지", description = entireText + "을(를) 일시정지 했습니다.", color = 0x00ff00))
-    else:
-        await ctx.send("지금 노래가 재생되지 않네요.")
-
-@bot.command()
-async def 다시재생(ctx):
-    try:
-        vc.resume()
-    except:
-         await ctx.send("지금 노래가 재생되지 않네요.")
-    else:
-         await ctx.send(embed = discord.Embed(title= "다시재생", description = entireText  + "을(를) 다시 재생했습니다.", color = 0x00ff00))
-
-@bot.command()
-async def 노래끄기(ctx):
-    if vc.is_playing():
-        vc.stop()
-        await ctx.send(embed = discord.Embed(title= "노래끄기", description = entireText  + "을(를) 종료했습니다.", color = 0x00ff00))
-    else:
-        await ctx.send("지금 노래가 재생되지 않네요.")
-
-@bot.command()
-async def 지금노래(ctx):
-    if not vc.is_playing():
-        await ctx.send("지금은 노래가 재생되지 않네요..")
-    else:
-        await ctx.send(embed = discord.Embed(title = "지금노래", description = "현재 " + entireText + "을(를) 재생하고 있습니다.", color = 0x00ff00))
-
-@bot.command()
-async def 멜론차트(ctx):
-    if not vc.is_playing():
-        
-        options = webdriver.ChromeOptions()
-        options.add_argument("headless")
-
-        global entireText
-        YDL_OPTIONS = {'format': 'bestaudio', 'noplaylist':'True'}
-        FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
-            
-        drive = load_chrome_driver()
-        driver = webdriver.Chrome(chromedriver_dir, options = options)
-        driver.get("https://www.youtube.com/results?search_query=멜론차트")
-        source = driver.page_source
-        bs = bs4.BeautifulSoup(source, 'lxml')
-        entire = bs.find_all('a', {'id': 'video-title'})
-        entireNum = entire[0]
-        entireText = entireNum.text.strip()
-        musicurl = entireNum.get('href')
-        url = 'https://www.youtube.com'+musicurl 
-
-        driver.quit()
-
-        with YoutubeDL(YDL_OPTIONS) as ydl:
-            info = ydl.extract_info(url, download=False)
-        URL = info['formats'][0]['url']
-        await ctx.send(embed = discord.Embed(title= "노래 재생", description = "현재 " + entireText + "을(를) 재생하고 있습니다.", color = 0x00ff00))
-        vc.play(FFmpegPCMAudio(URL, **FFMPEG_OPTIONS))
-    else:
-        await ctx.send("이미 노래가 재생 중이라 노래를 재생할 수 없어요!")
-
-@bot.command()
-async def 공지(ctx):
-    await bot.send_message(message.channel, "@everyone")
-
+@bot.event 
+async def on_command_error(ctx, error):
+	if isinstance(error, CommandNotFound):
+		return
+	elif isinstance(error, discord.ext.commands.MissingRequiredArgument):
+		return
+	raise error
 
 client.run(os.environ['token'])
