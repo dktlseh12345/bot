@@ -35,7 +35,7 @@ def title(msg):
     options = webdriver.ChromeOptions()
     options.add_argument("headless")
 
-    chromedriver_dir = r"C:\chromedriver.exe"
+    drive = load_chrome_driver()
     driver = webdriver.Chrome(chromedriver_dir, options = options)
     driver.get("https://www.youtube.com/results?search_query="+msg+"+lyrics")
     source = driver.page_source
@@ -86,6 +86,18 @@ def play_next(ctx):
     else:
         if not vc.is_palying():
             client.loop.create_task(vc.disconnect())
+
+def load_chrome_driver():
+      
+    options = webdriver.ChromeOptions()
+
+    options.binary_location = os.getenv('GOOGLE_CHROME_BIN')
+
+    options.add_argument('--headless')
+    # options.add_argument('--disable-gpu')
+    options.add_argument('--no-sandbox')
+
+    return webdriver.Chrome(executable_path=str(os.environ.get('CHROME_EXECUTABLE_PATH')), chrome_options=options)
 
 @bot.command()
 async def 대기열추가(ctx, *, msg):
@@ -187,18 +199,16 @@ async def 즐겨찾기(ctx):
             else:
                 await ctx.send("아직 등록하신 즐겨찾기가 없어요.")
 
+
+    if not discord.opus.is_loaded():
+        discord.opus.load_opus('opus')
+
 @bot.event
 async def on_ready():
-
-  # [discord.Status.online = 온라인],[discord.Status.idle = 자리비움],[discord.Status.dnd = 다른용무],[discord.Status.offline = 오프라인]
-  await client.change_presence(status=discord.Status.online)
-
-  await client.change_presence(activity=discord.Game(name="봇 코딩중"))
-  #await client.change_presence(activity=discord.Streaming(name="스트림 방송중", url='링크'))
-  #await client.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="노래 듣는중"))
-  #await client.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="영상 시청중"))
-  
-  print("봇 이름:",client.user.name,"봇 아이디:",client.user.id,"봇 버전:",discord.__version__)
+    print('다음으로 로그인합니다: ')
+    print(bot.user.name)
+    print('connection was succesful')
+    await bot.change_presence(status=discord.Status.online, activity=discord.Game("봇 코딩중~"))
 
 @bot.command()
 async def 입장(ctx):
@@ -303,7 +313,7 @@ async def 검색(ctx, *, msg):
         YDL_OPTIONS = {'format': 'bestaudio', 'noplaylist':'True'}
         FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
             
-        chromedriver_dir = r"C:\chromedriver.exe"
+        drive = load_chrome_driver()
         driver = webdriver.Chrome(chromedriver_dir, options = options)
         driver.get("https://www.youtube.com/results?search_query="+msg+"+lyrics")
         source = driver.page_source
@@ -371,7 +381,7 @@ async def 멜론차트(ctx):
         YDL_OPTIONS = {'format': 'bestaudio', 'noplaylist':'True'}
         FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
             
-        chromedriver_dir = r"C:\chromedriver.exe"
+        drive = load_chrome_driver()
         driver = webdriver.Chrome(chromedriver_dir, options = options)
         driver.get("https://www.youtube.com/results?search_query=멜론차트")
         source = driver.page_source
